@@ -16,26 +16,46 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "sharewizard.settings")
 
 django.setup()
 
-from ashare.models import Company, Trade, Strategy
+from ashare.models import Company, Trade, Strategy, Industry
 
 from ashare.strategy.Shrink import Shrink
 
 
-def work():
+def work(begin_date, end_date):
     all_company = Company.objects.all()
-    today = date_util.today()
-    s_40_day_ago = date_util.get_n_days_ago(40)
     process = 0
     shrink_strategy = Shrink()
+    company_list = []
     for company in all_company:
         process += 1
         if process % 100 == 0:
             print(process)
-        price_list = Trade.objects.order_by('-t_date').filter(company=company, t_date__gt=s_40_day_ago.strftime("%Y-%m-%d"),
-                                                                 t_date__lt=today.strftime("%Y-%m-%d")).values_list('close', 'amount')
+        price_list = Trade.objects.order_by('-t_date').filter(company=company, t_date__gt=begin_date.strftime("%Y-%m-%d"),
+                                                                 t_date__lt=end_date.strftime("%Y-%m-%d")).values_list('close', 'amount')
         if shrink_strategy.filter(price_list):
             print(company)
 
+            strategy = Strategy(t_date=end_date, company=company, t_type=Strategy.STRATEGY_TYPE)
+            strategy.save()
+
+            company_list.append(company)
+
+    industry_count(end_date, company_list, Industry.T_SHRINK)
+
+
+def industry_count(cur_date, company_list, strategy_type):
+    industry_high_count = {}
+    for company in company_list:
+        industry_high_count[company.industry] = industry_high_count.get(company.industry, 0) + 1
+
+    for industry, count in industry_high_count.items():
+        print(industry, count)
+        industry_model = Industry(t_date=cur_date, name=industry, t_type=strategy_type, number=count)
+        industry_model.save()
+
 
 if __name__ == "__main__":
-    work()
+    for i in range(0, 1):
+        end_date = date_util.get_n_days_ago(i)
+        begin_date = date_util.get_n_days_ago(60+i)
+        work(begin_date, end_date)
